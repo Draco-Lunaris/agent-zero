@@ -7,7 +7,7 @@ import tempfile
 import warnings
 from typing import Any
 
-import whisper
+import aiohttp
 
 from helpers import files, plugins
 from helpers.notification import (
@@ -30,6 +30,7 @@ DEFAULT_CONFIG = {
     "silence_threshold": 0.3,
     "silence_duration": 1000,
     "waiting_timeout": 2000,
+    "remote_url": "",
 }
 VALID_MODEL_SIZES = {"tiny", "base", "small", "medium", "large", "turbo"}
 VALID_MESSAGE_MODES = {"send", "draft"}
@@ -63,7 +64,7 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
     try:
         silence_threshold = float(
             config.get("silence_threshold", normalized["silence_threshold"])
-        )
+    )
         normalized["silence_threshold"] = min(max(silence_threshold, 0.0), 1.0)
     except (TypeError, ValueError):
         pass
@@ -83,6 +84,10 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
             normalized["waiting_timeout"] = waiting_timeout
     except (TypeError, ValueError):
         pass
+
+    remote_url = str(config.get("remote_url", normalized["remote_url"]) or "").strip()
+    if remote_url:
+        normalized["remote_url"] = remote_url.rstrip("/")
 
     return normalized
 
@@ -150,18 +155,88 @@ async def is_downloaded() -> bool:
     return _model is not None
 
 
+async def is_remote_healthy() -> tuple[bool, str]:
+    """Check if the remote Whisper API server is reachable.
+
+    Returns (healthy, error_message). If no remote_url is configured,
+    returns (False, "Not configured").
+    """
+    cfg = get_config()
+    remote_url = cfg.get("remote_url", "")
+    if not remote_url:
+        return False, "Not configured"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{remote_url}/health",
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status == 200:
+                    return True, ""
+                return False, f"HTTP {resp.status}"
+    except Exception as e:
+        return False, str(e)
+
+
 async def transcribe(
     audio_bytes_b64: str, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     cfg = normalize_config(config or get_config())
-    return await _transcribe(
+    remote_url = str(cfg.get("remote_url", ""))
+
+    if remote_url:
+        return await _transcribe_remote(
+            audio_bytes_b64,
+            remote_url=remote_url,
+            language=_resolve_language(str(cfg["language"])),
+        )
+
+    return await _transcribe_local(
         str(cfg["model_size"]),
         audio_bytes_b64,
         language=_resolve_language(str(cfg["language"])),
     )
 
 
-async def _transcribe(
+async def _transcribe_remote(
+    audio_bytes_b64: str,
+    *,
+    remote_url: str,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Transcribe audio using a remote Whisper-compatible API server.
+
+    Uses the OpenAI-compatible /v1/audio/transcriptions endpoint.
+    """
+    audio_bytes = base64.b64decode(audio_bytes_b64)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            data.add_field(
+                "file",
+                audio_bytes,
+                filename="audio.wav",
+                content_type="audio/wav",
+            )
+            if language:
+                data.add_field("language", language)
+
+            async with session.post(
+                f"{remote_url}/v1/audio/transcriptions",
+                data=data,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                resp.raise_for_status()
+                result = await resp.json()
+                return result if isinstance(result, dict) else {"text": str(result)}
+    except Exception as e:
+        PrintStyle.error(f"Error in remote Whisper STT transcription: {e}")
+        raise
+
+
+async def _transcribe_local(
     model_name: str, audio_bytes_b64: str, *, language: str | None = None
 ) -> dict[str, Any]:
     await _preload(model_name)
@@ -179,6 +254,9 @@ async def _transcribe(
 
         result = _model.transcribe(temp_path, **kwargs)  # type: ignore[union-attr]
         return result if isinstance(result, dict) else {}
+    except Exception as e:
+        PrintStyle.error(f"Error in local Whisper STT transcription: {e}")
+        raise
     finally:
         try:
             os.remove(temp_path)

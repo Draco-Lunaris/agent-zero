@@ -16,8 +16,9 @@
       <div>
         <div class="section-title">Whisper STT</div>
         <div class="section-description">
-          Built-in Whisper transcription. Dependency installation stays on the Docker/bootstrap path;
-          this plugin only owns the speech-to-text behavior, UI, and routing.
+          Whisper speech-to-text. Supports local model transcription and remote
+          Whisper-compatible API services. When disabled, voice input falls back
+          to the browser speech recognition API.
         </div>
 
         <div class="speech-plugin-grid">
@@ -28,17 +29,19 @@
               <span class="status-badge" :class="$store.whisperStt.enabled ? 'ok' : 'warn'" x-text="$store.whisperStt.enabled ? 'Yes' : 'No'"></span>
             </div>
             <div class="status-row">
-              <span class="status-key">Model</span>
+              <span class="status-key">Local Model</span>
               <span class="status-badge" :class="$store.whisperStt.statusClass" x-text="$store.whisperStt.statusText"></span>
             </div>
             <div class="status-row" x-show="$store.whisperStt.loadedModel">
               <span class="status-key">Loaded</span>
               <span class="status-value" x-text="$store.whisperStt.loadedModel"></span>
             </div>
-            <div class="status-row" x-show="$store.whisperStt.packageVersion">
-              <span class="status-key">Package</span>
-              <span class="status-value" x-text="$store.whisperStt.packageVersion"></span>
-            </div>
+            <template x-if="$store.whisperStt.config.remote_url">
+              <div class="status-row">
+                <span class="status-key">Remote</span>
+                <span class="status-badge" :class="$store.whisperStt.remoteHealthy ? 'ok' : 'warn'" x-text="$store.whisperStt.remoteHealthy ? 'Healthy' : 'Unreachable'"></span>
+              </div>
+            </template>
           </div>
 
           <div class="speech-plugin-card">
@@ -67,6 +70,14 @@
               <span class="status-key">Wait</span>
               <span class="status-value" x-text="`${$store.whisperStt.config.waiting_timeout} ms`"></span>
             </div>
+            <template x-if="$store.whisperStt.config.remote_url">
+              <div>
+                <div class="status-row">
+                  <span class="status-key">Remote URL</span>
+                  <span class="status-value mono" x-text="$store.whisperStt.config.remote_url"></span>
+                </div>
+              </div>
+            </template>
           </div>
 
           <div class="speech-plugin-card">

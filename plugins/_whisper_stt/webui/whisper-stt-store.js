@@ -59,11 +59,12 @@ const model = {
     silence_threshold: 0.3,
     silence_duration: 1000,
     waiting_timeout: 2000,
+    remote_url: "",
   },
   modelReady: false,
   modelLoading: false,
   loadedModel: "",
-  packageVersion: "",
+  remoteHealthy: false,
   providerCleanup: null,
   microphoneInput: null,
   isProcessingClick: false,
@@ -119,11 +120,12 @@ const model = {
         silence_threshold: Number(status?.config?.silence_threshold ?? 0.3),
         silence_duration: Number(status?.config?.silence_duration ?? 1000),
         waiting_timeout: Number(status?.config?.waiting_timeout ?? 2000),
+        remote_url: status?.config?.remote_url || "",
       };
       this.modelReady = !!status?.model?.ready;
       this.modelLoading = !!status?.model?.loading;
       this.loadedModel = status?.model?.loaded_model || "";
-      this.packageVersion = status?.package?.version || "";
+      this.remoteHealthy = !!status?.remote?.healthy;
 
       if (this.enabled) {
         this.registerProvider();

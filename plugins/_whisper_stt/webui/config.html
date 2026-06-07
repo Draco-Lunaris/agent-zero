@@ -9,15 +9,26 @@
       <div class="plugin-config-page">
         <div class="section-title">Whisper STT</div>
         <div class="section-description">
-          Configure the built-in Whisper speech-to-text provider. Browser microphone
-          device selection stays local to the Web UI and is managed from the plugin status panel.
+          Configure the Whisper speech-to-text provider. Supports both local model
+          transcription and a remote Whisper-compatible API service. When disabled,
+          voice input falls back to the browser speech recognition API.
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <div class="field-title">Remote URL</div>
+            <div class="field-description">URL of a remote Whisper-compatible API service (e.g. http://localhost:9000). Leave empty to use local model transcription.</div>
+          </div>
+          <div class="field-control">
+            <input type="text" x-model="config.remote_url" />
+          </div>
         </div>
 
         <div class="field">
           <div class="field-label">
             <div class="field-title">Model Size</div>
             <div class="field-description">
-              Whisper model variant loaded by the backend runtime.
+              Whisper model variant loaded by the backend runtime (local only).
             </div>
           </div>
           <div class="field-control">
